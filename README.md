@@ -43,6 +43,103 @@ You submit **code, not predictions**. Your model runs inside the evaluation cont
 
 Submissions run in `pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime` (Python 3.11, torch 2.4.1, torchvision, numpy, Pillow) with **no network access**. Ship everything your model needs inside the zip.
 
+## Our Baselines: ImageNet Vision Transformers
+
+The [`notebooks/`](notebooks) folder holds Kaggle notebooks that download the data, train a model, and package a Track 1 submission ZIP. Candidate backbones for later experiments are listed in [`models_to_use.txt`](models_to_use.txt).
+
+| Notebook | Backbone | Params | Pretrained weights | ImageNet-1K top-1 | Epochs | Batch | Peak LR $\eta_{\max}$ | Layer decay $\lambda$ | ZIP size |
+|---|---|---|---|---|---|---|---|---|---|
+| [`upar-track1-vit-b16.ipynb`](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) | ViT-B/16 (12 blocks, width 768) | 86.6M | `torchvision` `ViT_B_16_Weights.IMAGENET1K_V1` | 81.07% | 8 | 64 | $10^{-4}$ | 0.75 | 159 MB |
+| [`upar_track1_vit_l16.ipynb`](notebooks/upar_track1_vit_l16/upar_track1_vit_l16.ipynb) | ViT-L/16 (24 blocks, width 1024) | 304.3M | `torchvision` `ViT_L_16_Weights.IMAGENET1K_V1` | 79.66% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~547 MB |
+
+The notebooks follow the structure and download cells of the organizers' Kaggle example notebook, which was written for Track 2 (attribute-based retrieval), but they package a **Track 1** submission. Both ViT checkpoints are trained on ImageNet-1K only, which the rules permit, and `torchvision` is already in the evaluation image, so nothing besides the weights needs to ship in the ZIP. Submission ZIPs are not committed (`*.zip` is in `.gitignore`), because they exceed GitHub's 100 MB file limit.
+
+### Results on the provided validation split
+
+ViT-B/16, trained on Kaggle (one run, seed 42). Each value is the mean over the Market1501, PA-100K and PETA parts of the validation split; the best epoch is in bold. The packaged checkpoint is from epoch 6.
+
+| Epoch | Train BCE | Val BCE | mA | Instance F1 | Challenge_Avg |
+|---|---|---|---|---|---|
+| 1 | 0.6099 | 0.4596 | 0.7931 | 0.7361 | 0.7632 |
+| 2 | 0.3059 | 0.3790 | 0.8297 | 0.7946 | 0.8113 |
+| 3 | 0.2322 | 0.3636 | 0.8341 | 0.8206 | 0.8268 |
+| 4 | 0.1901 | 0.3920 | **0.8396** | 0.8351 | 0.8367 |
+| 5 | 0.1584 | 0.4287 | 0.8295 | 0.8438 | 0.8360 |
+| **6** | 0.1359 | 0.4495 | 0.8327 | 0.8500 | **0.8408** |
+| 7 | 0.1205 | 0.4740 | 0.8250 | 0.8541 | 0.8389 |
+| 8 | 0.1130 | 0.4796 | 0.8237 | **0.8546** | 0.8385 |
+
+Validation BCE is lowest at epoch 3 and rises afterwards while Instance F1 keeps improving, so the model becomes over-confident as it fits the training data. mA peaks at epoch 4.
+
+This run averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. ViT-L/16 has not been trained yet.
+
+### Running a notebook
+
+1. Open the notebook in Kaggle with **Internet** and a **GPU** enabled, and run all cells.
+2. Section 1 downloads Market1501, PA-100K and PETA into `/kaggle/working/upar_2027/data` (97,669 training and 33,407 validation images).
+3. Sections 2–4 fine-tune the ViT and keep the checkpoint with the best validation $\text{Challenge\_Avg}$.
+4. Sections 5–6 write `run.py` and `metadata.yaml`, build `/kaggle/working/upar_track1_vit_{b16,l16}_submission.zip`, and smoke-test the packaged `run.py`. Upload that ZIP to Codabench.
+
+ViT-L is roughly three times slower than ViT-B per epoch. Lower `BATCH_SIZE` to 16 if the GPU runs out of memory.
+
+### Model
+
+Each crop $x$ is resized to $224 \times 224$ (torchvision's ViT needs square inputs) and normalised with the ImageNet mean and standard deviation. The ViT encoder $f_\theta$ yields the class-token embedding $h = f_\theta(x) \in \mathbb{R}^{d}$, with $d = 768$ (ViT-B) or $d = 1024$ (ViT-L). A zero-initialised linear head predicts one logit per attribute, and a sigmoid turns each logit into an independent probability:
+
+$$
+z = W h + b, \qquad W \in \mathbb{R}^{40 \times d},\ b \in \mathbb{R}^{40}, \qquad p_j = \sigma(z_j) = \frac{1}{1 + e^{-z_j}}, \quad j = 1, \dots, 40.
+$$
+
+### Loss: positive-weighted binary cross-entropy
+
+Attributes such as *Hair-Length-Bald* or *Accessory-Glasses-Sun* are rare, so positives are up-weighted. With $N$ training images and $P_j$ positives for attribute $j$, the weight is the clipped negative-to-positive ratio:
+
+$$
+w_j = \operatorname{clip}\!\left(\frac{N - P_j}{\max(P_j, 1)},\ 1,\ 20\right).
+$$
+
+For a batch of $B$ images with labels $y_{ij} \in \{0, 1\}$, the loss is
+
+$$
+\mathcal{L} = -\frac{1}{40\,B} \sum_{i=1}^{B} \sum_{j=1}^{40} \Big[ w_j\, y_{ij} \log \sigma(z_{ij}) + (1 - y_{ij}) \log\big(1 - \sigma(z_{ij})\big) \Big].
+$$
+
+### Optimisation
+
+AdamW with weight decay $0.05$ (none on biases, norms, the class token and positional embeddings), mixed-precision training, and gradient clipping at $\lVert g \rVert_2 \le 1$.
+
+**Layer-wise learning-rate decay.** With $D$ transformer blocks ($D = 12$ for ViT-B, $D = 24$ for ViT-L), the patch embedding, class token and positional embeddings get layer index $l = 0$, block $k$ gets $l = k + 1$, and the final norm and head get $l = D + 1$. Earlier layers learn more slowly, which preserves the pretrained features:
+
+$$
+\eta_l(t) = \eta(t) \cdot \lambda^{\,D + 1 - l}.
+$$
+
+**Warm-up and cosine schedule.** With $T$ total steps and $T_w$ warm-up steps (one epoch):
+
+$$
+\eta(t) =
+\begin{cases}
+\eta_{\max} \, \dfrac{t + 1}{T_w}, & t < T_w, \\[2ex]
+\dfrac{\eta_{\max}}{2} \left( 1 + \cos\!\left( \pi \, \dfrac{t - T_w}{T - T_w} \right) \right), & t \ge T_w.
+\end{cases}
+$$
+
+**Augmentation.** Random horizontal flip, 10-pixel edge padding followed by a random $224 \times 224$ crop, and random erasing ($p = 0.25$). There is no colour jitter, because it would corrupt the colour labels.
+
+### Inference and test-time augmentation
+
+`run.py` averages the logits of each image and its horizontal flip $\tilde{x}$, then thresholds at 0.5 as the evaluation does:
+
+$$
+p_j(x) = \sigma\!\left( \frac{z_j(x) + z_j(\tilde{x})}{2} \right), \qquad \hat{y}_j = \mathbb{1}\big[p_j(x) > 0.5\big].
+$$
+
+Checkpoints are stored in float16 to halve the ZIP size and are cast back to float32 when loaded.
+
+### Checkpoint selection
+
+After every epoch, the notebooks compute $\text{mA}$, $\text{Instance\_F1}$ and $\text{Challenge\_Avg}$ (see [Evaluation](#evaluation)) separately on the Market1501, PA-100K and PETA parts of the validation split, average them, and keep the epoch with the highest $\text{Challenge\_Avg}$. The hidden test set comes from an unseen domain, so expect the leaderboard score to be lower than the validation score.
+
 ## Code Submission and Winner Selection
 
 After the challenge deadline, participating teams are required to submit their code, models, and a short description of their method (fact sheet) by **Oct 26, 2026, AoE** to upar.challenge@gmail.com. A panel of experts will review the entries. The executable/source code should include trained models, training code, and necessary parameters to ensure reproducibility. Teams that do not comply are removed from the final ranking.
@@ -137,27 +234,41 @@ Your model returns a probability in [0, 1] per attribute. An attribute counts as
 | Inst_Rec | Instance_Rec | instance-based recall |
 | Inst_F1 | Instance_F1 | instance-based F1 |
 
-Label-based metrics are computed per attribute and then averaged over the attributes, so rare attributes weigh as much as frequent ones:
+Label-based metrics are computed per attribute and then averaged over the $M = 40$ attributes, so rare attributes weigh as much as frequent ones. $\text{TP}_j, \text{FN}_j, \text{TN}_j, \text{FP}_j$ are the counts for attribute $j$ over all images:
 
-```
-mA       = mean over attributes of ( TP / (TP + FN)  +  TN / (TN + FP) ) / 2
-Label_F1 = mean over attributes of the attribute's F1
-```
+$$
+\text{mA} = \frac{1}{M} \sum_{j=1}^{M} \frac{1}{2} \left( \frac{\text{TP}_j}{\text{TP}_j + \text{FN}_j} + \frac{\text{TN}_j}{\text{TN}_j + \text{FP}_j} \right)
+$$
 
-Instance-based metrics are computed per image, over the set of attributes predicted present P and the set actually present G, and then averaged over the images:
+$$
+\text{Label\_F1} = \frac{1}{M} \sum_{j=1}^{M} \frac{2\,\text{TP}_j}{2\,\text{TP}_j + \text{FP}_j + \text{FN}_j}
+$$
 
-```
-Instance_Acc  = |P ∩ G| / |P ∪ G|
-Instance_Prec = |P ∩ G| / |P|
-Instance_Rec  = |P ∩ G| / |G|
-Instance_F1   = 2 · Prec · Rec / (Prec + Rec)
-```
+Instance-based metrics are computed per image $i$, over the set of attributes predicted present $P_i$ and the set actually present $G_i$, and then averaged over the $N$ images:
 
-The ranking metric balances both views:
+$$
+\text{Instance\_Acc} = \frac{1}{N} \sum_{i=1}^{N} \frac{\lvert P_i \cap G_i \rvert}{\lvert P_i \cup G_i \rvert},
+\qquad
+\text{Instance\_Prec} = \frac{1}{N} \sum_{i=1}^{N} \frac{\lvert P_i \cap G_i \rvert}{\lvert P_i \rvert},
+\qquad
+\text{Instance\_Rec} = \frac{1}{N} \sum_{i=1}^{N} \frac{\lvert P_i \cap G_i \rvert}{\lvert G_i \rvert}
+$$
 
-```
-Challenge_Avg = 2 · mA · Instance_F1 / (mA + Instance_F1)
-```
+$$
+\text{Instance\_F1} = \frac{2 \cdot \text{Instance\_Prec} \cdot \text{Instance\_Rec}}{\text{Instance\_Prec} + \text{Instance\_Rec}}
+$$
+
+The ranking metric is the harmonic mean of the two views:
+
+$$
+\text{Challenge\_Avg} = \frac{2 \cdot \text{mA} \cdot \text{Instance\_F1}}{\text{mA} + \text{Instance\_F1}}
+$$
+
+With test datasets $\mathcal{D}_1, \dots, \mathcal{D}_K$ (see [Datasets](#datasets)), every leaderboard value is the unweighted mean over the datasets, for example
+
+$$
+\text{Challenge\_Avg} = \frac{1}{K} \sum_{k=1}^{K} \text{Challenge\_Avg}(\mathcal{D}_k).
+$$
 
 ### Datasets
 
