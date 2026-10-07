@@ -1,0 +1,87 @@
+UPAR Challenge 2027 Track 1 - Candidate Models (all allowed: generic pretraining only)
+=====================================================================================
+
+CNN
+---
+| Model                              | Params      | Pretraining                         | Notes                                      |
+|------------------------------------|-------------|-------------------------------------|--------------------------------------------|
+| ResNet-50 / ResNet-101             | 25M / 45M   | ImageNet-1k                         | Reference baseline only                    |
+| EfficientNetV2-M / L               | 54M / 119M  | ImageNet-21k                        | Efficient, fast to run                     |
+| RegNetY-16GF                       | 84M         | ImageNet / SWAG                     | Decent but older                           |
+| ConvNeXt-Base / Large              | 89M / 198M  | ImageNet-22k                        | Reliable and easy to train                 |
+| ConvNeXt V2-Base / Large  [PICK]   | 89M / 198M  | Masked-image (FCMAE) + ImageNet-22k | Fine-tunes better than V1                  |
+| ConvNeXt-B / L distilled (DINOv3)  | 89M / 198M  | Distilled from DINOv3               | CNN speed, foundation-model features       |
+| CLIP-ConvNeXt-Large (LAION)        | 200M        | LAION-2B image-text                 | CNN with CLIP-style robustness             |
+Use: ConvNeXt V2-Base as the fast baseline and the CNN member of an ensemble.
+     Try the DINOv3-distilled ConvNeXt if its license suits you.
+
+ViT (supervised / masked-image pretraining)
+-------------------------------------------
+| Model                              | Params      | Pretraining                              | Notes                                 |
+|------------------------------------|-------------|------------------------------------------|---------------------------------------|
+| ViT-B/16 (AugReg)                  | 86M         | ImageNet-21k                             | Plain baseline                        |
+| DeiT III-B / L                     | 86M / 304M  | ImageNet-22k                             | Strong training recipe                |
+| Swin-B / Swin-L, SwinV2-B          | 88M / 197M  | ImageNet-22k                             | Windowed attention handles tall crops |
+| BEiT v2-B / L                      | 86M / 304M  | Masked-image + ImageNet-22k              | Strong fine-tuning                    |
+| EVA02-B / L  [PICK]                | 86M / 304M  | Masked-image (CLIP-distilled) + IN-22k   | Best fine-tuning results in this group|
+| Hiera-B / L                        | 52M / 214M  | Masked-image pretraining                 | Fast and hierarchical                 |
+Use: EVA02-L if you have a strong GPU, otherwise EVA02-B.
+
+CLIP-style (image-text)
+-----------------------
+| Model                              | Params      | Pretraining                  | Notes                                          |
+|------------------------------------|-------------|------------------------------|------------------------------------------------|
+| OpenAI CLIP ViT-B/16, ViT-L/14     | 86M / 304M  | 400M image-text pairs        | Used by AttriVision and PromptPAR              |
+| EVA02-CLIP-L/14                    | 304M        | Merged image-text data       | Very strong                                    |
+| DFN-CLIP ViT-L/14, ViT-H/14        | 304M / 632M | Filtered image-text data     | Robust                                         |
+| MetaCLIP 2 ViT-L / H               | 304M / 632M | Worldwide image-text data    | Good diversity                                 |
+| SigLIP 2 ViT-B/16, ViT-L/16 [PICK] | 86M / 303M  | WebLI image-text data        | Backbone of VLM-PAR (current state of the art) |
+| SigLIP 2 So400m/14                 | ~400M       | WebLI image-text data        | Strongest SigLIP 2; heavier                    |
+| PE-Core B / L                      | 86M / ~300M | Meta Perception Encoder      | Among top encoders in recent surveys           |
+Use: SigLIP 2 ViT-L/16 - MAIN MODEL for the challenge. If time allows, compare with PE-Core-L.
+
+Self-supervised
+---------------
+| Model                              | Params      | Pretraining                  | Notes                                      |
+|------------------------------------|-------------|------------------------------|--------------------------------------------|
+| MAE ViT-L                          | 304M        | Masked-image pretraining     | Needs long fine-tuning                     |
+| iBOT / DINO v1                     | 86M         | Self-distillation            | Older                                      |
+| DINOv2 ViT-B/14, ViT-L/14 (reg)    | 86M / 304M  | LVD-142M curated images      | Proven and easy to use                     |
+| DINOv3 ViT-B/16, ViT-L/16 [PICK]   | 86M / 300M  | LVD-1.7B curated images      | Cleaner features; check the DINOv3 license |
+| SigLino (SigLIP 2 + DINOv3)        | Various     | Distilled                    | New (CVPR 2026); combines both families    |
+Use: DINOv3 ViT-L/16 (or DINOv2-L if the DINOv3 license is a problem) as the
+     second ensemble member next to SigLIP 2.
+
+Large VLMs
+----------
+| Model                              | Params  | Notes                                                        |
+|------------------------------------|---------|--------------------------------------------------------------|
+| SmolVLM 256M / 500M / 2B           | 0.25-2B | Small enough for the container, but weak at attributes       |
+| InternVL3.5-1B / 2B                | 1-2B    | Usable size; its encoder (InternViT-300M) can be used alone  |
+| Qwen2.5-VL / Qwen3-VL (3B, 7B)     | 3-8B    | Strong but too slow at inference                             |
+| Florence-2-L                       | 0.77B   | Its DaViT encoder could serve as a backbone                  |
+| PaliGemma 2 (3B)                   | 3B      | Its encoder is SigLIP, so just use SigLIP 2 directly         |
+Use: none at inference. Use only their vision encoders (covered above).
+     Generating training labels with a VLM probably counts as external data - avoid.
+
+Final pick per category
+-----------------------
+| Category        | Pick                          | Role                                  |
+|-----------------|-------------------------------|---------------------------------------|
+| CNN             | ConvNeXt V2-Base              | Fast baseline and third ensemble member|
+| ViT             | EVA02-L                       | Optional ensemble member              |
+| CLIP-style      | SigLIP 2 ViT-L/16             | MAIN MODEL                            |
+| Self-supervised | DINOv3 ViT-L/16 (or DINOv2-L) | Second ensemble member                |
+| Large VLM       | None (encoders only)          | -                                     |
+
+Sources
+-------
+- UPAR Challenge 2024 results: https://openaccess.thecvf.com/content/WACV2024W/RWS/papers/Cormier_UPAR_Challenge_2024_Pedestrian_Attribute_Recognition_and_Attribute-Based_Person_Retrieval_WACVW_2024_paper.pdf
+- AttriVision (WACVW 2025): https://openaccess.thecvf.com/content/WACV2025W/V3SC/html/Sedeh_AttriVision_Advancing_Generalization_in_Pedestrian_Attribute_Recognition_using_CLIP_WACVW_2025_paper.html
+- VLM-PAR: https://arxiv.org/html/2512.22217v1
+- PromptPAR: https://arxiv.org/html/2312.10692v2
+- DINOv3: https://arxiv.org/html/2508.10104v1
+- SigLino: https://huggingface.co/collections/tiiuae/siglino-vision-foundation-models-siglip2-dinov3
+- Vision encoder survey: https://jina.ai/vision-encoder-survey.pdf
+- InternVL3.5: https://arxiv.org/pdf/2508.18265
+- SmolVLM: https://arxiv.org/pdf/2504.05299
