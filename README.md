@@ -50,9 +50,11 @@ The [`notebooks/`](notebooks) folder holds Kaggle notebooks that download the da
 | Notebook | Backbone | Params | Pretrained weights | ImageNet-1K top-1 | Epochs | Batch | Peak LR $\eta_{\max}$ | Layer decay $\lambda$ | ZIP size |
 |---|---|---|---|---|---|---|---|---|---|
 | [`upar-track1-vit-b16.ipynb`](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) | ViT-B/16 (12 blocks, width 768) | 86.6M | `torchvision` `ViT_B_16_Weights.IMAGENET1K_V1` | 81.07% | 8 | 64 | $10^{-4}$ | 0.75 | 159 MB |
-| [`upar_track1_vit_l16.ipynb`](notebooks/upar_track1_vit_l16/upar_track1_vit_l16.ipynb) | ViT-L/16 (24 blocks, width 1024) | 304.3M | `torchvision` `ViT_L_16_Weights.IMAGENET1K_V1` | 79.66% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~547 MB |
+| [`upar-track1-vit-l16.ipynb`](notebooks/upar_track1_vit_l16/upar-track1-vit-l16.ipynb) | ViT-L/16 (24 blocks, width 1024) | 304.3M | `torchvision` `ViT_L_16_Weights.IMAGENET1K_V1` | 79.66% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~547 MB |
+| [`upar-track1-deit3-b16.ipynb`](notebooks/upar_track1_deit3_b16/upar-track1-deit3-b16.ipynb) | DeiT III-B/16 (12 blocks, width 768) | 86.6M | `timm` `deit3_base_patch16_224.fb_in22k_ft_in1k` | 85.7% | 8 | 64 | $10^{-4}$ | 0.75 | ~159 MB |
+| [`upar-track1-deit3-l16.ipynb`](notebooks/upar_track1_deit3_l16/upar-track1-deit3-l16.ipynb) | DeiT III-L/16 (24 blocks, width 1024) | 304.4M | `timm` `deit3_large_patch16_224.fb_in22k_ft_in1k` | 87.0% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~559 MB |
 
-The notebooks follow the structure and download cells of the organizers' Kaggle example notebook, which was written for Track 2 (attribute-based retrieval), but they package a **Track 1** submission. Both ViT checkpoints are trained on ImageNet-1K only, which the rules permit, and `torchvision` is already in the evaluation image, so nothing besides the weights needs to ship in the ZIP. Submission ZIPs are not committed (`*.zip` is in `.gitignore`), because they exceed GitHub's 100 MB file limit.
+The notebooks follow the structure and download cells of the organizers' Kaggle example notebook, which was written for Track 2 (attribute-based retrieval), but they package a **Track 1** submission. Both ViT checkpoints are trained on ImageNet-1K only, which the rules permit, and `torchvision` is already in the evaluation image, so nothing besides the weights needs to ship in the ZIP. The DeiT III checkpoints are pretrained on ImageNet-22k and fine-tuned on ImageNet-1K, and timm downloads them from the Hugging Face Hub. timm is not in the evaluation image, so the DeiT III `run.py` defines the network in plain PyTorch with timm's parameter names, and the packaging step checks that it gives the same logits as the timm model. DeiT III training also uses stochastic depth (drop-path rate 0.1 for B, 0.2 for L). Submission ZIPs are not committed (`*.zip` is in `.gitignore`), because they exceed GitHub's 100 MB file limit.
 
 ### Results on the provided validation split
 
@@ -71,16 +73,26 @@ ViT-B/16, trained on Kaggle (one run, seed 42). Each value is the mean over the 
 
 Validation BCE is lowest at epoch 3 and rises afterwards while Instance F1 keeps improving, so the model becomes over-confident as it fits the training data. mA peaks at epoch 4.
 
-This run averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. ViT-L/16 has not been trained yet.
+This run averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. ViT-L/16 and the DeiT III models have not been trained yet.
+
+### Results on the hidden test set (Codabench leaderboard)
+
+Scores of the submitted ZIP from [`upar-track1-vit-b16.ipynb`](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) (epoch-6 checkpoint above). Each value is the mean over the hidden test datasets.
+
+| Model | Avg | mA | Label_F1 | Inst_Acc | Inst_Prec | Inst_Rec | Inst_F1 |
+|---|---|---|---|---|---|---|---|
+| ViT-B/16 | **0.7305** | 0.7402 | 0.5202 | 0.5895 | 0.6805 | 0.7846 | 0.7210 |
+
+On the unseen test domain, Challenge_Avg drops from 0.8408 on validation to 0.7305. mA falls by 0.093 (0.8327 → 0.7402) and Instance F1 by 0.129 (0.8500 → 0.7210). The validation Instance F1 of this run is the older per-image average, so that drop is approximate. Instance recall (0.7846) is higher than precision (0.6805), so the model predicts too many attributes on the test domain. This fits the positive-weighted loss, which pushes rare attributes above the 0.5 threshold.
 
 ### Running a notebook
 
 1. Open the notebook in Kaggle with **Internet** and a **GPU** enabled, and run all cells.
 2. Section 1 downloads Market1501, PA-100K and PETA into `/kaggle/working/upar_2027/data` (97,669 training and 33,407 validation images).
 3. Sections 2–4 fine-tune the ViT and keep the checkpoint with the best validation $\text{Challenge\_Avg}$.
-4. Sections 5–6 write `run.py` and `metadata.yaml`, build `/kaggle/working/upar_track1_vit_{b16,l16}_submission.zip`, and smoke-test the packaged `run.py`. Upload that ZIP to Codabench.
+4. Sections 5–6 write `run.py` and `metadata.yaml`, build `/kaggle/working/upar_track1_<model>_submission.zip`, and smoke-test the packaged `run.py`. Upload that ZIP to Codabench.
 
-ViT-L is roughly three times slower than ViT-B per epoch. Lower `BATCH_SIZE` to 16 if the GPU runs out of memory.
+The L/16 models are roughly three times slower than the B/16 models per epoch. Lower `BATCH_SIZE` to 16 if the GPU runs out of memory.
 
 ### Model
 
