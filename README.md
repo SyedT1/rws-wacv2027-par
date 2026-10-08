@@ -50,7 +50,7 @@ The [`notebooks/`](notebooks) folder holds Kaggle notebooks that download the da
 | Notebook | Backbone | Params | Pretrained weights | ImageNet-1K top-1 | Epochs | Batch | Peak LR $\eta_{\max}$ | Layer decay $\lambda$ | ZIP size |
 |---|---|---|---|---|---|---|---|---|---|
 | [`upar-track1-vit-b16.ipynb`](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) | ViT-B/16 (12 blocks, width 768) | 86.6M | `torchvision` `ViT_B_16_Weights.IMAGENET1K_V1` | 81.07% | 8 | 64 | $10^{-4}$ | 0.75 | 159 MB |
-| [`upar-track1-vit-l16.ipynb`](notebooks/upar_track1_vit_l16/upar-track1-vit-l16.ipynb) | ViT-L/16 (24 blocks, width 1024) | 304.3M | `torchvision` `ViT_L_16_Weights.IMAGENET1K_V1` | 79.66% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~547 MB |
+| [`upar-track1-vit-l16.ipynb`](notebooks/upar_track1_vit_l16/upar-track1-vit-l16.ipynb) | ViT-L/16 (24 blocks, width 1024) | 304.3M | `torchvision` `ViT_L_16_Weights.IMAGENET1K_V1` | 79.66% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | 553 MB |
 | [`upar-track1-deit3-b16.ipynb`](notebooks/upar_track1_deit3_b16/upar-track1-deit3-b16.ipynb) | DeiT III-B/16 (12 blocks, width 768) | 86.6M | `timm` `deit3_base_patch16_224.fb_in22k_ft_in1k` | 85.7% | 8 | 64 | $10^{-4}$ | 0.75 | ~159 MB |
 | [`upar-track1-deit3-l16.ipynb`](notebooks/upar_track1_deit3_l16/upar-track1-deit3-l16.ipynb) | DeiT III-L/16 (24 blocks, width 1024) | 304.4M | `timm` `deit3_large_patch16_224.fb_in22k_ft_in1k` | 87.0% | 5 | 32 | $5 \cdot 10^{-5}$ | 0.85 | ~559 MB |
 
@@ -58,32 +58,49 @@ The notebooks follow the structure and download cells of the organizers' Kaggle 
 
 ### Results on the provided validation split
 
-ViT-B/16, trained on Kaggle (one run, seed 42). Each value is the mean over the Market1501, PA-100K and PETA parts of the validation split; the best epoch is in bold. The packaged checkpoint is from epoch 6.
+Each model was trained once on Kaggle (seed 42). Each value is the mean over the Market1501, PA-100K and PETA parts of the validation split. The best value in each column is in bold, and the bold epoch is the packaged checkpoint.
+
+**ViT-B/16** (8 epochs, packaged checkpoint from epoch 6):
 
 | Epoch | Train BCE | Val BCE | mA | Instance F1 | Challenge_Avg |
 |---|---|---|---|---|---|
 | 1 | 0.6099 | 0.4596 | 0.7931 | 0.7361 | 0.7632 |
 | 2 | 0.3059 | 0.3790 | 0.8297 | 0.7946 | 0.8113 |
-| 3 | 0.2322 | 0.3636 | 0.8341 | 0.8206 | 0.8268 |
+| 3 | 0.2322 | **0.3636** | 0.8341 | 0.8206 | 0.8268 |
 | 4 | 0.1901 | 0.3920 | **0.8396** | 0.8351 | 0.8367 |
 | 5 | 0.1584 | 0.4287 | 0.8295 | 0.8438 | 0.8360 |
 | **6** | 0.1359 | 0.4495 | 0.8327 | 0.8500 | **0.8408** |
 | 7 | 0.1205 | 0.4740 | 0.8250 | 0.8541 | 0.8389 |
-| 8 | 0.1130 | 0.4796 | 0.8237 | **0.8546** | 0.8385 |
+| 8 | **0.1130** | 0.4796 | 0.8237 | **0.8546** | 0.8385 |
 
 Validation BCE is lowest at epoch 3 and rises afterwards while Instance F1 keeps improving, so the model becomes over-confident as it fits the training data. mA peaks at epoch 4.
 
-This run averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. ViT-L/16 and the DeiT III models have not been trained yet.
+**ViT-L/16** (5 epochs, packaged checkpoint from epoch 4):
+
+| Epoch | Train BCE | Val BCE | mA | Instance F1 | Challenge_Avg |
+|---|---|---|---|---|---|
+| 1 | 0.6093 | 0.4569 | 0.7867 | 0.7601 | 0.7729 |
+| 2 | 0.2829 | **0.3860** | 0.8190 | 0.8112 | 0.8147 |
+| 3 | 0.1918 | 0.4081 | **0.8257** | 0.8262 | 0.8255 |
+| **4** | 0.1404 | 0.4708 | 0.8183 | 0.8414 | **0.8293** |
+| 5 | **0.1152** | 0.5058 | 0.8105 | **0.8453** | 0.8272 |
+
+ViT-L/16 shows the same pattern sooner: validation BCE is lowest at epoch 2 and mA peaks at epoch 3. Its best Challenge_Avg (0.8293) is below ViT-B/16's (0.8408), even though it has 3.5 times as many parameters. Its torchvision weights are also weaker on ImageNet (79.66% vs 81.07% top-1).
+
+Both runs averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. The DeiT III models have not been trained yet.
 
 ### Results on the hidden test set (Codabench leaderboard)
 
-Scores of the submitted ZIP from [`upar-track1-vit-b16.ipynb`](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) (epoch-6 checkpoint above). Each value is the mean over the hidden test datasets.
+Scores of the submitted ZIPs, using the packaged checkpoints above. Each value is the mean over the hidden test datasets, and the best value in each column is in bold.
 
-| Model | Avg | mA | Label_F1 | Inst_Acc | Inst_Prec | Inst_Rec | Inst_F1 |
-|---|---|---|---|---|---|---|---|
-| ViT-B/16 | **0.7305** | 0.7402 | 0.5202 | 0.5895 | 0.6805 | 0.7846 | 0.7210 |
+| Model | Checkpoint | Avg | mA | Label_F1 | Inst_Acc | Inst_Prec | Inst_Rec | Inst_F1 |
+|---|---|---|---|---|---|---|---|---|
+| [ViT-B/16](notebooks/upar_track1_vit_b16/upar-track1-vit-b16.ipynb) | epoch 6 | **0.7305** | **0.7402** | **0.5202** | **0.5895** | **0.6805** | **0.7846** | **0.7210** |
+| [ViT-L/16](notebooks/upar_track1_vit_l16/upar-track1-vit-l16.ipynb) | epoch 4 | 0.7210 | 0.7274 | 0.5007 | 0.5820 | 0.6788 | 0.7742 | 0.7148 |
 
-On the unseen test domain, Challenge_Avg drops from 0.8408 on validation to 0.7305. mA falls by 0.093 (0.8327 → 0.7402) and Instance F1 by 0.129 (0.8500 → 0.7210). The validation Instance F1 of this run is the older per-image average, so that drop is approximate. Instance recall (0.7846) is higher than precision (0.6805), so the model predicts too many attributes on the test domain. This fits the positive-weighted loss, which pushes rare attributes above the 0.5 threshold.
+ViT-B/16 beats ViT-L/16 on every metric, so the larger torchvision backbone does not help under domain shift. The gap is largest on the label-based metrics: mA is 0.0128 higher and Label_F1 0.0195 higher. Instance F1 differs by only 0.0062.
+
+For ViT-B/16, Challenge_Avg drops from 0.8408 on validation to 0.7305. mA falls by 0.093 (0.8327 → 0.7402) and Instance F1 by 0.129 (0.8500 → 0.7210). The validation Instance F1 of this run is the older per-image average, so that drop is approximate. Instance recall (0.7846) is higher than precision (0.6805), so the model predicts too many attributes on the test domain. This fits the positive-weighted loss, which pushes rare attributes above the 0.5 threshold. ViT-L/16 drops from 0.8293 to 0.7210, and its recall (0.7742) is also well above its precision (0.6788).
 
 ### Running a notebook
 
@@ -96,7 +113,36 @@ The L/16 models are roughly three times slower than the B/16 models per epoch. L
 
 ### Model
 
-Each crop $x$ is resized to $224 \times 224$ (torchvision's ViT needs square inputs) and normalised with the ImageNet mean and standard deviation. The ViT encoder $f_\theta$ yields the class-token embedding $h = f_\theta(x) \in \mathbb{R}^{d}$, with $d = 768$ (ViT-B) or $d = 1024$ (ViT-L). A zero-initialised linear head predicts one logit per attribute, and a sigmoid turns each logit into an independent probability:
+Each crop $x$ is resized to $224 \times 224$ (torchvision's ViT needs square inputs) and normalised with the ImageNet mean and standard deviation.
+
+**Encoder.** The image is cut into $n = (224/16)^2 = 196$ patches of $16 \times 16$ pixels. Each patch $x_p^{(i)}$ is flattened and linearly projected to width $d$ (a $16 \times 16$ convolution with stride 16). A learnable class token is prepended, and learnable position embeddings are added:
+
+$$
+X_0 = \big[\, x_{\text{cls}};\ E\,x_p^{(1)};\ \dots;\ E\,x_p^{(196)} \,\big] + E_{\text{pos}}, \qquad E \in \mathbb{R}^{d \times 768},\ E_{\text{pos}} \in \mathbb{R}^{197 \times d}.
+$$
+
+Each of the $D$ pre-norm transformer blocks applies multi-head self-attention (MSA) with $H$ heads and a two-layer GELU MLP of width $4d$, each with a residual connection:
+
+$$
+X'_k = X_{k-1} + \operatorname{MSA}\big(\operatorname{LN}(X_{k-1})\big), \qquad X_k = X'_k + \operatorname{MLP}\big(\operatorname{LN}(X'_k)\big), \qquad k = 1, \dots, D,
+$$
+
+$$
+\operatorname{MSA}(X) = \big[\operatorname{head}_1; \dots; \operatorname{head}_H\big] W_O, \qquad \operatorname{head}_m = \operatorname{softmax}\!\left(\frac{Q_m K_m^{\top}}{\sqrt{d/H}}\right) V_m .
+$$
+
+The encoder output is the final layer norm of the class token, $h = f_\theta(x) = \operatorname{LN}(X_D)_{\text{cls}} \in \mathbb{R}^{d}$.
+
+DeiT III uses the same blocks with two changes. Each residual branch is scaled by a learnable per-channel LayerScale vector $\gamma$, as in $X'_k = X_{k-1} + \gamma_{1,k} \odot \operatorname{MSA}(\cdot)$. The position embeddings cover only the 196 patch tokens, not the class token.
+
+| Model | Blocks $D$ | Width $d$ | Heads $H$ | MLP width $4d$ | Steps per epoch | Total steps $T$ | Warm-up $T_w$ | Lowest LR factor $\lambda^{D+1}$ |
+|---|---|---|---|---|---|---|---|---|
+| ViT-B/16, DeiT III-B/16 | 12 | 768 | 12 | 3072 | 1,526 | 12,208 | 1,526 | $0.75^{13} = 0.024$ |
+| ViT-L/16, DeiT III-L/16 | 24 | 1024 | 16 | 4096 | 3,052 | 15,260 | 3,052 | $0.85^{25} = 0.017$ |
+
+Steps per epoch are $\lfloor 97{,}669 / B \rfloor$, because the last incomplete batch is dropped. The lowest LR factor applies to the patch embedding, class token and position embeddings, so their peak learning rate is $2.4 \cdot 10^{-6}$ for the B/16 models and $8.6 \cdot 10^{-7}$ for the L/16 models.
+
+**Head.** A zero-initialised linear head predicts one logit per attribute, and a sigmoid turns each logit into an independent probability:
 
 $$
 z = W h + b, \qquad W \in \mathbb{R}^{40 \times d},\ b \in \mathbb{R}^{40}, \qquad p_j = \sigma(z_j) = \frac{1}{1 + e^{-z_j}}, \quad j = 1, \dots, 40.
