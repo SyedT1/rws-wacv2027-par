@@ -19,7 +19,7 @@ ViT (supervised / masked-image pretraining)
 -------------------------------------------
 | Model                              | Params      | Pretraining                              | Notes                                 |
 |------------------------------------|-------------|------------------------------------------|---------------------------------------|
-| ViT-B/16 (AugReg)                  | 86M         | ImageNet-21k                             | Plain baseline                        |
+| (Applied)ViT-B/16 (AugReg)                  | 86M         | ImageNet-21k                             | Plain baseline                        |
 | DeiT III-B / L                     | 86M / 304M  | ImageNet-22k                             | Strong training recipe                |
 | Swin-B / Swin-L, SwinV2-B          | 88M / 197M  | ImageNet-22k                             | Windowed attention handles tall crops |
 | BEiT v2-B / L                      | 86M / 304M  | Masked-image + ImageNet-22k              | Strong fine-tuning                    |
