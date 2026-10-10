@@ -55,8 +55,9 @@ The [`notebooks/`](notebooks) folder holds Kaggle notebooks that download the da
 | [`upar-track1-deit3-l16.ipynb`](notebooks/ViT/upar_track1_deit3_l16/upar-track1-deit3-l16.ipynb) | DeiT III-L/16 (24 blocks, width 1024) | 304.4M | `timm` `deit3_large_patch16_224.fb_in22k_ft_in1k` | 87.0% | 5 | 32 | $`5 \cdot 10^{-5}`$ | 0.85 | ~559 MB |
 | [`upar-track1-eva02-b14.ipynb`](notebooks/ViT/upar_track1_eva02_b14/upar-track1-eva02-b14.ipynb) | EVA02-B/14 (12 blocks, width 768) | 87.1M | `timm` `eva02_base_patch14_448.mim_in22k_ft_in22k_in1k` | 88.7% (448 px) | 8 | 64 | $`10^{-4}`$ | 0.75 | ~159 MB |
 | [`upar-track1-eva02-l14.ipynb`](notebooks/ViT/upar_track1_eva02_l14/upar-track1-eva02-l14.ipynb) | EVA02-L/14 (24 blocks, width 1024) | 305.1M | `timm` `eva02_large_patch14_448.mim_in22k_ft_in22k_in1k` | 89.9% (448 px) | 5 | 16 | $`5 \cdot 10^{-5}`$ | 0.85 | ~559 MB |
+| [`upar-track1-siglip2-b16.ipynb`](notebooks/CLIP-Style/upar_track1_siglip2_b16/upar-track1-siglip2-b16.ipynb) | SigLIP 2 ViT-B/16 (12 blocks, width 768, attention pooling) | 92.9M | `timm` `vit_base_patch16_siglip_224.v2_webli` | n/a (contrastive, WebLI) | 8 | 64 | $`10^{-4}`$ | 0.75 | 172 MB |
 
-The notebooks follow the structure and download cells of the organizers' Kaggle example notebook, which was written for Track 2 (attribute-based retrieval), but they package a **Track 1** submission. Both ViT checkpoints are trained on ImageNet-1K only, which the rules permit, and `torchvision` is already in the evaluation image, so nothing besides the weights needs to ship in the ZIP. The DeiT III checkpoints are pretrained on ImageNet-22k and fine-tuned on ImageNet-1K, and timm downloads them from the Hugging Face Hub. timm is not in the evaluation image, so the DeiT III `run.py` defines the network in plain PyTorch with timm's parameter names, and the packaging step checks that it gives the same logits as the timm model. DeiT III training also uses stochastic depth (drop-path rate 0.1 for B, 0.2 for L). The EVA02 checkpoints are pretrained on ImageNet-22k with masked image modeling (EVA-CLIP features as the target) and fine-tuned on ImageNet-22k and ImageNet-1K at 448 px. The notebooks train them at 224 px with the CLIP mean and standard deviation, the same drop-path rates as DeiT III, and the same plain-PyTorch `run.py` check. EVA02-L uses batch size 16 so that training fits in the 16 GB of a T4. Submission ZIPs exceed GitHub's 100 MB file limit, so they are stored with Git LFS (`*.zip` in `.gitattributes`); run `git lfs pull` after cloning to download them.
+The notebooks follow the structure and download cells of the organizers' Kaggle example notebook, which was written for Track 2 (attribute-based retrieval), but they package a **Track 1** submission. Both ViT checkpoints are trained on ImageNet-1K only, which the rules permit, and `torchvision` is already in the evaluation image, so nothing besides the weights needs to ship in the ZIP. The DeiT III checkpoints are pretrained on ImageNet-22k and fine-tuned on ImageNet-1K, and timm downloads them from the Hugging Face Hub. timm is not in the evaluation image, so the DeiT III `run.py` defines the network in plain PyTorch with timm's parameter names, and the packaging step checks that it gives the same logits as the timm model. DeiT III training also uses stochastic depth (drop-path rate 0.1 for B, 0.2 for L). The EVA02 checkpoints are pretrained on ImageNet-22k with masked image modeling (EVA-CLIP features as the target) and fine-tuned on ImageNet-22k and ImageNet-1K at 448 px. The notebooks train them at 224 px with the CLIP mean and standard deviation, the same drop-path rates as DeiT III, and the same plain-PyTorch `run.py` check. The SigLIP 2 checkpoint is the image encoder of Google's SigLIP 2 (Apache-2.0), pretrained on WebLI image-text pairs with a sigmoid contrastive loss, a captioning decoder, self-distillation and masked prediction. It is a contrastive model, so it has no ImageNet-1K top-1. The notebook trains it at its native 224 px resolution with mean and standard deviation 0.5 (pixels scaled to $`[-1, 1]`$), drop-path rate 0.1, and the DeiT III-B hyperparameters; the packaged `run.py` again defines the network in plain PyTorch and checks that it matches timm (max logit difference 0). EVA02-L uses batch size 16 so that training fits in the 16 GB of a T4. Submission ZIPs exceed GitHub's 100 MB file limit, so they are stored with Git LFS (`*.zip` in `.gitattributes`); run `git lfs pull` after cloning to download them.
 
 ### Results on the provided validation split
 
@@ -89,7 +90,22 @@ Validation BCE is lowest at epoch 3 and rises afterwards while Instance F1 keeps
 
 ViT-L/16 shows the same pattern sooner: validation BCE is lowest at epoch 2 and mA peaks at epoch 3. Its best Challenge_Avg (0.8293) is below ViT-B/16's (0.8408), even though it has 3.5 times as many parameters. Its torchvision weights are also weaker on ImageNet (79.66% vs 81.07% top-1).
 
-Both runs averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. Both DeiT III models and EVA02-B/14 have been trained and scored (see below); EVA02-L/14 has not been trained yet.
+Both runs averaged per-image F1 scores to get Instance F1. The notebooks now compute it from the image-averaged precision and recall, as the evaluation script does (see [Evaluation](#evaluation)), so later runs can show slightly different Instance F1 and Challenge_Avg values. Both DeiT III models, EVA02-B/14 and SigLIP 2 ViT-B/16 have been trained and scored (see below); EVA02-L/14 has not been trained yet.
+
+**SigLIP 2 ViT-B/16** (8 epochs, packaged checkpoint from epoch 7):
+
+| Epoch | Train BCE | Val BCE | mA | Instance F1 | Challenge_Avg |
+|---|---|---|---|---|---|
+| 1 | 0.6430 | 0.4625 | 0.7978 | 0.7565 | 0.7762 |
+| 2 | 0.3137 | 0.3732 | 0.8410 | 0.8206 | 0.8302 |
+| 3 | 0.2465 | **0.3518** | 0.8489 | 0.8329 | 0.8403 |
+| 4 | 0.2102 | 0.3557 | 0.8541 | 0.8531 | 0.8530 |
+| 5 | 0.1836 | 0.3544 | **0.8596** | 0.8610 | 0.8598 |
+| 6 | 0.1613 | 0.3778 | 0.8585 | 0.8679 | 0.8627 |
+| **7** | 0.1473 | 0.3978 | 0.8595 | 0.8730 | **0.8656** |
+| 8 | **0.1393** | 0.4092 | 0.8568 | **0.8743** | 0.8649 |
+
+SigLIP 2 reaches a validation Challenge_Avg of 0.8656, above ViT-B/16 (0.8408) and ViT-L/16 (0.8293). Validation BCE is lowest at epoch 3 and mA peaks at epoch 5, while Instance F1 keeps rising until epoch 8, the same over-confidence pattern as the other models. Its Instance F1 is computed from the image-averaged precision and recall, as in the evaluation script, so it is not directly comparable with the older ViT-B/16 and ViT-L/16 values.
 
 ### Results on the hidden test set (Codabench leaderboard)
 
@@ -102,8 +118,11 @@ Scores of the submitted ZIPs, using the packaged checkpoints above. Each value i
 | [DeiT III-B/16](notebooks/ViT/upar_track1_deit3_b16/upar-track1-deit3-b16.ipynb) | best validation epoch | 0.7541 | 0.7641 | 0.5565 | 0.6187 | 0.7067 | 0.8031 | 0.7443 |
 | [DeiT III-L/16](notebooks/ViT/upar_track1_deit3_l16/upar-track1-deit3-l16.ipynb) | best validation epoch | **0.7716** | **0.7849** | 0.5684 | 0.6361 | 0.7101 | **0.8320** | 0.7587 |
 | [EVA02-B/14](notebooks/ViT/upar_track1_eva02_b14/upar-track1-eva02-b14.ipynb) | best validation epoch | 0.7703 | 0.7775 | **0.5777** | **0.6435** | **0.726** | 0.8206 | **0.7632** |
+| [SigLIP 2 ViT-B/16](notebooks/CLIP-Style/upar_track1_siglip2_b16/upar-track1-siglip2-b16.ipynb) | epoch 7 | 0.7570 | 0.7716 | 0.5572 | 0.6172 | 0.6939 | 0.8174 | 0.7430 |
 
 EVA02-B/14 (87.1M parameters) scores Avg 0.7703, only 0.0013 below DeiT III-L/16 (304.4M) and 0.0162 above DeiT III-B/16. It has the best Label_F1, Inst_Acc, Inst_Prec and Inst_F1; DeiT III-L/16 keeps the best Avg, mA and Inst_Rec. EVA02-B/14's gain over DeiT III-L/16 comes from precision (0.726 vs 0.7101) with lower recall (0.8206 vs 0.8320), so it over-predicts attributes less. DeiT III-L/16 is the best of the other models (Avg 0.7716), +0.0175 over DeiT III-B/16 and +0.0411 over ViT-B/16. DeiT III-B/16 in turn beats ViT-B/16 by 0.0236, so the ImageNet-22k pretraining helps under domain shift. Unlike the torchvision models, the larger DeiT III backbone also helps: mA rises by 0.0208 and Instance F1 by 0.0144. Most of the Instance F1 gain comes from recall (+0.0289) rather than precision (+0.0034), so DeiT III-L/16 over-predicts attributes even more (recall 0.8320 vs precision 0.7101). Among the torchvision models, ViT-B/16 beats ViT-L/16 on every metric, so the larger backbone does not help. For ViT-B/16 vs ViT-L/16, the gap is largest on the label-based metrics: mA is 0.0128 higher and Label_F1 0.0195 higher. Instance F1 differs by only 0.0062.
+
+SigLIP 2 ViT-B/16 (92.9M parameters) scores Avg 0.7570. It beats DeiT III-B/16 by 0.0029 (mA +0.0075, Label_F1 +0.0007), but is below EVA02-B/14 by 0.0133 and DeiT III-L/16 by 0.0146. Although its validation Challenge_Avg (0.8656) is above the ViT-B/16 and ViT-L/16 runs, it drops by 0.1086 on the test domain: mA falls by 0.0879 (0.8595 → 0.7716) and Instance F1 by 0.130 (0.8730 → 0.7430). Its instance recall (0.8174) is well above its precision (0.6939), and its precision and Instance F1 are slightly below DeiT III-B/16's (0.7067 and 0.7443). So the larger image-text pretraining set did not give the best robustness under domain shift here, and validation score is a poor predictor of the leaderboard ranking.
 
 For ViT-B/16, Challenge_Avg drops from 0.8408 on validation to 0.7305. mA falls by 0.093 (0.8327 → 0.7402) and Instance F1 by 0.129 (0.8500 → 0.7210). The validation Instance F1 of this run is the older per-image average, so that drop is approximate. Instance recall (0.7846) is higher than precision (0.6805), so the model predicts too many attributes on the test domain. This fits the positive-weighted loss, which pushes rare attributes above the 0.5 threshold. ViT-L/16 drops from 0.8293 to 0.7210, and its recall (0.7742) is also well above its precision (0.6788).
 
@@ -144,8 +163,17 @@ DeiT III uses the same blocks with two changes. Each residual branch is scaled b
 |---|---|---|---|---|---|---|---|---|
 | ViT-B/16, DeiT III-B/16 | 12 | 768 | 12 | 3072 | 1,526 | 12,208 | 1,526 | $`0.75^{13} = 0.024`$ |
 | ViT-L/16, DeiT III-L/16 | 24 | 1024 | 16 | 4096 | 3,052 | 15,260 | 3,052 | $`0.85^{25} = 0.017`$ |
+| SigLIP 2 ViT-B/16 | 12 | 768 | 12 | 3072 | 1,526 | 12,208 | 1,526 | $`0.75^{13} = 0.024`$ |
 
 Steps per epoch are $`\lfloor 97{,}669 / B \rfloor`$, because the last incomplete batch is dropped. The lowest LR factor applies to the patch embedding, class token and position embeddings, so their peak learning rate is $`2.4 \cdot 10^{-6}`$ for the B/16 models and $`8.6 \cdot 10^{-7}`$ for the L/16 models.
+
+SigLIP 2 ViT-B/16 differs from the blocks above in three ways. It has no class token and no `[CLS]` position, so the 196 position embeddings cover only the patch tokens. Inputs are normalised with mean and standard deviation $`0.5`$ instead of the ImageNet statistics. The encoder output is pooled by SigLIP's pretrained attention-pooling head (multi-head attention pooling, MAP): a learned query $`q`$ attends to all 196 final-norm tokens, followed by a residual MLP, which is fine-tuned together with the encoder:
+
+```math
+h = u + \mathrm{MLP}\big(\mathrm{LN}(u)\big), \qquad u = \mathrm{MSA}\big(q,\ \mathrm{LN}(X_D),\ \mathrm{LN}(X_D)\big), \qquad h \in \mathbb{R}^{768}.
+```
+
+The pooling head has the same layer index as the final norm and classifier, $`l = D + 1`$. The text encoder is not used. Configuration: `timm` `vit_base_patch16_siglip_224.v2_webli`, 224 px input, 8 epochs, batch 64, peak LR $`10^{-4}`$, layer decay 0.75, drop-path 0.1, weight decay 0.05, 1 warm-up epoch, seed 42.
 
 **Head.** A zero-initialised linear head predicts one logit per attribute, and a sigmoid turns each logit into an independent probability:
 
