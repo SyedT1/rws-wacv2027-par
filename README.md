@@ -149,6 +149,7 @@ Scores of the submitted ZIPs, using the packaged checkpoints above. Each value i
 | [DeiT III-L/16](notebooks/ViT/upar_track1_deit3_l16/upar-track1-deit3-l16.ipynb) | best validation epoch | 0.7716 | 0.7849 | 0.5684 | 0.6361 | 0.7101 | 0.8320 | 0.7587 |
 | [EVA02-B/14](notebooks/ViT/upar_track1_eva02_b14/upar-track1-eva02-b14.ipynb) | best validation epoch | 0.7703 | 0.7775 | 0.5777 | 0.6435 | 0.726 | 0.8206 | 0.7632 |
 | [EVA02-B/14 attribute query](notebooks/ViT/upar_track1_eva02_b14_attribute_query/upar-track1-eva02-b14-attribute-query.ipynb) | not reported | 0.7714 | 0.7783 | 0.584 | 0.6453 | 0.7237 | 0.8264 | 0.7646 |
+| [EVA02-B/14 rectangular attribute query](notebooks/ViT/upar_track1_eva02_b14_attribute_query_rectangular/upar-track1-eva02-b14-attribute-query-rectangular.ipynb) | not reported | 0.7739 | 0.7814 | 0.5906 | 0.6469 | 0.7229 | 0.8320 | 0.7666 |
 | [SigLIP 2 ViT-B/16](notebooks/CLIP-Style/upar_track1_siglip2_b16/upar-track1-siglip2-b16.ipynb) | epoch 7 | 0.7570 | 0.7716 | 0.5572 | 0.6172 | 0.6939 | 0.8174 | 0.7430 |
 | [SigLIP 2 So400m/14](notebooks/CLIP-Style/upar_track1_siglip2_so400m14/upar-track1-siglip2-so400m14.ipynb) | epoch 5 | 0.7774 | 0.7849 | 0.583 | 0.652 | 0.7236 | **0.8394** | 0.77 |
 | [DINOv3 ViT-B/16](notebooks/Self-supervised/upar_track1_dinov3_b16/upar-track1-dinov3-b16.ipynb) | epoch 8 | 0.7638 | 0.7843 | 0.5516 | 0.6165 | 0.6827 | 0.8386 | 0.7443 |
@@ -175,9 +176,15 @@ For ViT-B/16, Challenge_Avg drops from 0.8408 on validation to 0.7305. mA falls 
 
 The attribute-query run scores Avg 0.7714, +0.0011 over the EVA02-B/14 baseline (0.7703). It improves mA by 0.0008, Label_F1 by 0.0063, Inst_Acc by 0.0018, Inst_Rec by 0.0058 and Inst_F1 by 0.0014, while Inst_Prec falls by 0.0023.
 
-### Rectangular attribute-query experiment (not yet scored)
+### Rectangular attribute-query experiment
 
-[`upar-track1-eva02-b14-attribute-query-rectangular.ipynb`](notebooks/ViT/upar_track1_eva02_b14_attribute_query_rectangular/upar-track1-eva02-b14-attribute-query-rectangular.ipynb) tests the same attribute-query recipe at height 280 × width 140, with rectangular preprocessing, absolute position embeddings, rotary positions, and offline inference. This produces 200 patch tokens, compared with 256 at 224 × 224. A supported 308 × 168 control gives 264 tokens for a closer compute comparison. Geometry and head mode appear in artifact names. The notebook checks rectangular rotary positions against timm and full-model equivalence before training, then checks the trained submission. See the [comparison instructions](notebooks/ViT/upar_track1_eva02_b14_attribute_query_rectangular/README.md). No measured improvement is claimed.
+[`upar-track1-eva02-b14-attribute-query-rectangular.ipynb`](notebooks/ViT/upar_track1_eva02_b14_attribute_query_rectangular/upar-track1-eva02-b14-attribute-query-rectangular.ipynb) tests the same attribute-query recipe at height 280 × width 140, with rectangular preprocessing, absolute position embeddings, rotary positions, and offline inference. This produces 200 patch tokens, compared with 256 at 224 × 224. A supported 308 × 168 control gives 264 tokens for a closer compute comparison. Geometry and head mode appear in artifact names. The notebook checks rectangular rotary positions against timm and full-model equivalence before training, then checks the trained submission. See the [comparison instructions](notebooks/ViT/upar_track1_eva02_b14_attribute_query_rectangular/README.md).
+
+The reported rectangular run scores Avg 0.7739, +0.0025 over the square attribute-query run (0.7714) and +0.0036 over the EVA02-B/14 global baseline (0.7703). Compared with the square query run, mA rises by 0.0031, Label_F1 by 0.0066, Inst_Acc by 0.0016, Inst_Rec by 0.0056 and Inst_F1 by 0.0020, while Inst_Prec falls by 0.0008. These are single-run comparisons; geometry and token count change together, so the gain does not isolate an aspect-ratio effect. The selected epoch was not reported.
+
+### Domain-balanced sampling experiment (EVA02-L/14)
+
+[`upar-track1-eva02-l14-domain-balanced.ipynb`](notebooks/ViT/upar_track1_eva02_l14_domain_balanced/upar-track1-eva02-l14-domain-balanced.ipynb) tests a 50:50 mixture of image-uniform and domain-uniform sampling on the strongest recorded single backbone. It retains the EVA02-L global head, 224 × 224 inputs, five epochs, batch 16, optimizer settings, and fixed image-distribution positive weights. Every sampling arm has the same optimizer-step budget and uses flip-averaged validation. Run `SAMPLING_MODE = "image"` for a fresh control and `"mixture"` for the default experiment; an image-uniform replacement control is also available. It saves configuration, per-domain scores and draw counts, validation logits, and an offline submission ZIP. No result is recorded yet. See the [experiment instructions](notebooks/ViT/upar_track1_eva02_l14_domain_balanced/README.md).
 
 ### Running a notebook
 

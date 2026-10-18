@@ -1,1 +1,7 @@
 UPAR-Challenge-2027/
+
+# Local manuscript, author kit, and generated LaTeX files.
+/paper/
+
+# Temporary download-source verification artifacts.
+/.tmp-download-check/

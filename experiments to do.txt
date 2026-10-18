@@ -1,0 +1,536 @@
+UPAR WACV 2027 TRACK 1 - EXPERIMENTS TO DO
+Repository review and research recommendations - October 16, 2026
+
+The strongest route to a substantial improvement is an EVA02 model with
+attribute-specific spatial attention, better preservation of pretrained
+features, and training designed for domain generalization. The proposed gains
+are unmeasured hypotheses; none of these new experiments has been run as part
+of this review.
+
+This plan is based on the README, details.txt, models_to_use.txt, all 11
+notebooks, their saved outputs, and their inference implementations, together
+with primary sources for the previous challenge and the algorithms below.
+
+1. WHAT THE EXISTING EXPERIMENTS ESTABLISH
+========================================
+
+Recorded hidden-test Challenge_Avg scores:
+
+  ViT-B/16                              0.7305
+  ViT-L/16                              0.7210
+  DeiT III-B/16                         0.7541
+  DeiT III-L/16                         0.7716
+  EVA02-B/14                            0.7703
+  EVA02-L/14                            0.7825
+  SigLIP 2 ViT-B/16                     0.7570
+  SigLIP 2 So400m/14                    0.7774
+  DINOv3 ViT-B/16                       0.7638
+  EVA02-L + SigLIP 2 So400m ensemble     0.7856
+
+EVA02-L is the strongest demonstrated single model. Use it as the main model
+for transferring successful changes. EVA02-B is a useful development model:
+its score nearly matches DeiT III-L with substantially fewer parameters.
+
+The current ensemble improves Avg by 0.0031 over EVA02-L. Most of that gain
+is in mA; instance F1 changes only from 0.7842 to 0.7848.
+
+Domain shift remains large. SigLIP 2 So400m drops from validation Avg 0.8777
+to hidden-test Avg 0.7774. A better mixed-source validation score alone is
+insufficient evidence of better generalization.
+
+Current models use one shared global feature vector and a linear classifier
+to predict 40 attributes. Attribute-specific spatial extraction is untested.
+Most runs share the same loss, augmentation, and adaptation recipe, so the
+backbone comparisons do not establish the best training algorithm.
+
+The original priorities in models_to_use.txt should be reconsidered using
+the measured results: EVA02 has earned priority over its original optional
+ensemble-member designation.
+
+2. LESSONS FROM THE PREVIOUS CHALLENGE
+=====================================
+
+The previous edition referenced by the organizers is WACV 2024. Its raw
+leaderboard and verified awards differ:
+
+  fanttec:       raw Avg 71.8%; highest raw leaderboard score.
+  hdcolab:       raw Avg 71.7%; C2T-Net; verified first place.
+  sophere001:    raw Avg 71.6%; third on raw leaderboard.
+  DS:            raw Avg 70.5%; verified second place; highest raw mA, 72.2%.
+
+The organizers name hdcolab and DS as the verified winners. Sufficient
+reproducible details for a specific fanttec method were not established by
+the sources reviewed.
+
+C2T-Net combined Swin-B local features and EVA-L global features, adding
+channel attention and cross-attention fusion. Its ablation favored
+cross-fusion over simple feature concatenation.
+
+DS used EfficientNetV2-L, separate attribute MLP heads, balanced loss, label
+smoothing, stochastic weight averaging, and attribute threshold search.
+Its high mA but weaker instance F1 reinforces the need to select changes
+using Challenge_Avg.
+
+Historical scores cannot be compared directly with current scores because
+the evaluation data differ.
+
+Official awards:
+https://chalearnlap.cvc.uab.cat/challenge/57/description/
+
+Challenge report:
+https://openaccess.thecvf.com/content/WACV2024W/RWS/papers/Cormier_UPAR_Challenge_2024_Pedestrian_Attribute_Recognition_and_Attribute-Based_Person_Retrieval_WACVW_2024_paper.pdf
+
+C2T-Net paper:
+https://openaccess.thecvf.com/content/WACV2024W/RWS/papers/Bui_C2T-Net_Channel-Aware_Cross-Fused_Transformer-Style_Networks_for_Pedestrian_Attribute_Recognition_WACVW_2024_paper.pdf
+
+3. RECOMMENDED ALGORITHMIC EXPERIMENTS
+=====================================
+
+E01. ATTRIBUTE-QUERY DECODER
+---------------------------
+Priority: highest-priority architecture experiment.
+
+Replace global pooling with 40 attribute queries attending to EVA02 patch
+tokens. Different attributes can extract evidence from different regions.
+
+Initial configuration:
+  Backbone: EVA02-B; transfer successful changes to EVA02-L.
+  Queries: 40 learned attribute queries.
+  Decoder width: 256.
+  Decoder layers: 1, then 2.
+  Attention heads: 8.
+  Output: one binary logit per query.
+
+Compare the current linear head, query head, and a combination of global
+and query logits. Initially freeze the backbone to isolate the head's
+contribution, then unfreeze its final blocks.
+
+Keep if it improves held-out Challenge_Avg, with particular attention to
+small attributes and rare-attribute errors.
+
+Method references; their published benchmark gains are not UPAR guarantees:
+https://github.com/SlongLiu/query2labels
+https://github.com/Alibaba-MIIL/ML_Decoder
+
+E02. GLOBAL AND BODY-REGION FEATURES
+----------------------------------
+Priority: high; cheaper local-feature experiment.
+
+Extract global, head, upper-body, and lower-body features from one token
+grid. Feed relevant combinations to attribute-specific heads.
+
+Compare:
+  A. Fixed overlapping vertical regions.
+  B. Learned attention within approximate regions.
+  C. Region features combined with the current global feature.
+
+Use overlap and retain global context because crops may be misaligned,
+occluded, or incomplete. Compare directly against E01 before combining.
+
+E03. PEDESTRIAN-SHAPED INPUTS AND HIGHER RESOLUTION
+-------------------------------------------------
+Priority: high.
+
+Separate geometry from resolution. EVA02 patch size is 14 pixels.
+All dimensions below are HEIGHT x WIDTH:
+
+  224 x 224:   256 patch tokens; current baseline.
+  280 x 140:   200 patch tokens; tall shape with fewer tokens.
+  308 x 168:   264 patch tokens; tall shape with a closer token budget.
+  336 x 224:   384 patch tokens; moderate increase in detail.
+  448 x 224:   512 patch tokens; greater vertical detail.
+  448 x 448: 1,024 patch tokens; expensive resolution reference.
+
+Start with 280 x 140 and the 308 x 168 near-token-count control before
+testing 336 x 224. Shape and token count change together in the tall runs;
+the earlier claim that 280 x 140 has 256 tokens was incorrect.
+Also compare direct resizing with
+aspect-preserving letterboxing, using matching train/inference transforms.
+
+Update the custom inference implementation for rectangular positional
+embeddings, rotary coordinates, and checkpoint metadata. Changing the
+IMAGE_SIZE constant alone is insufficient.
+
+E04. LINEAR PROBING FOLLOWED BY FINE-TUNING (LP-FT)
+------------------------------------------------
+Priority: high; targets pretrained-feature distortion under domain shift.
+
+Compare full fine-tuning, frozen features, and staged adaptation at a
+similar compute budget:
+
+  Stage 1: freeze encoder; train classifier or decoder.
+  Stage 2: unfreeze final four transformer blocks.
+  Stage 3: optionally unfreeze all blocks at a lower encoder learning rate.
+
+Initial encoder learning-rate candidates: 5e-6, 1e-5, 2e-5. Use a larger
+learning rate for the new head. Tune using development data only.
+
+https://arxiv.org/abs/2202.10054
+
+E05. EMA AND SWAD-STYLE WEIGHT AVERAGING
+--------------------------------------
+Priority: high; low extra inference cost.
+
+Compare:
+  A. Best ordinary checkpoint.
+  B. Exponential moving average; initial decay 0.999.
+  C. Average over a stable late-training interval.
+  D. SWAD's validation-guided averaging procedure.
+
+Save intermediate checkpoints during future runs. Preserve FP32 weights
+for averaging. Avoid blindly averaging a strongly overfitted interval.
+An averaged model requires one model forward pass, unlike a prediction
+ensemble. Account for normalization buffers when using CNN members.
+
+https://github.com/khanrc/swad
+
+E06. CONTROLLED LOSS-FUNCTION COMPARISON
+--------------------------------------
+Priority: high.
+
+Existing positive weights are clipped negative-to-positive ratios, up to
+20. They can move decision boundaries toward predicting rare attributes.
+The observed precision/recall imbalance does not by itself establish the
+best correction.
+
+Compare:
+  A. Current weighted BCE.
+  B. Weighted BCE using the square root of current positive weights.
+  C. Unweighted BCE.
+  D. Asymmetric Loss: gamma_pos=1, gamma_neg=4, clip=0.05.
+  E. Less aggressive ASL: gamma_pos=0, gamma_neg=2, clip=0.
+
+Initially use ASL without the current large positive weights. Normalize
+loss reductions consistently; the official ASL implementation uses a sum.
+
+Select by Challenge_Avg. Inspect rare-attribute sensitivity, specificity,
+precision, recall, and false positives. Better mAP elsewhere does not
+guarantee better mA/F1 on UPAR.
+
+https://github.com/Alibaba-MIIL/ASL
+https://raw.githubusercontent.com/Alibaba-MIIL/ASL/main/src/loss_functions/losses.py
+
+E07. DOMAIN-BALANCED SAMPLING
+----------------------------
+Priority: high; inexpensive before complex domain objectives.
+
+PA100K supplies 79,001 of 97,669 training images, approximately 81%, while
+evaluation averages dataset scores equally.
+
+Compare:
+  A. Current uniform image sampling.
+  B. Equal-domain sampling.
+  C. A 50:50 mixture of image-uniform and domain-uniform sampling.
+
+Keep optimizer-step counts comparable. When sampling changes, recompute
+loss weights from the effective sampling distribution or explicitly hold
+them fixed as a separate ablation. Measure each domain separately.
+
+Organizer release counts:
+https://raw.githubusercontent.com/speckean/UPAR-Challenge-2027/main/README.md
+
+E08. GROUP DISTRIBUTIONALLY ROBUST OPTIMIZATION (GroupDRO)
+--------------------------------------------------------
+Priority: medium; test after domain-balanced sampling.
+
+Use the three known training datasets as groups. Increase emphasis on
+groups with high training loss:
+
+  L = sum_d q_d * L_d
+  q_d proportional to q_d * exp(eta * L_d)
+
+Smooth group-loss estimates and compare against equal-domain empirical
+risk minimization. Include regularization and early stopping. Naive
+GroupDRO can fail on overparameterized models, as the original work notes.
+
+Keep if mean held-out performance improves or worst-domain performance
+improves without an unacceptable mean-score loss.
+
+https://github.com/kohpangwei/group_DRO
+
+E09. LANGUAGE-INITIALIZED ATTRIBUTE QUERIES
+-----------------------------------------
+Priority: medium to high; builds on E01.
+
+The existing SigLIP notebooks discard the text encoder. Encode fixed
+descriptions of the 40 attributes with the matching generic text encoder,
+project them to the decoder dimension, and compare:
+
+  A. Random learned queries.
+  B. Fixed text-initialized queries.
+  C. Trainable text-initialized queries.
+  D. Learned prompts, only after the simpler comparisons succeed.
+
+Precompute fixed text embeddings so inference can use saved embeddings
+and the image model. Retain all 40 binary outputs matching UPAR. Adapt
+the papers' ideas rather than assuming their complete settings transfer.
+
+https://arxiv.org/html/2312.10692v2
+https://arxiv.org/html/2512.22217v1
+
+E10. C2T-NET-INSPIRED LOCAL/GLOBAL CROSS-FUSION
+--------------------------------------------
+Priority: high-upside, higher-cost architecture experiment.
+
+The existing ensemble averages final logits. Test combining features
+before classification:
+
+  EVA02 patch tokens + Swin feature tokens
+    -> common projection dimension
+    -> cross-attention fusion
+    -> attribute-query or global classifier
+
+First freeze both encoders and train fusion layers. Then unfreeze final
+stages if useful.
+
+Compare:
+  A. EVA02 alone.
+  B. Late logit averaging.
+  C. Feature concatenation.
+  D. Cross-attention fusion.
+
+Measure runtime and memory alongside score. Use generic pretrained
+encoders and train PAR components only on the allowed training data.
+The previous winner's PAR-trained checkpoint would violate the README's
+restriction on external PAR fine-tuning data.
+
+E11. PRETRAINED-WEIGHT OR FEATURE ANCHORING
+-----------------------------------------
+Priority: medium; complements the feature-preservation hypothesis.
+
+Compare:
+  A. L2-SP: penalize encoder movement from its generic pretrained weights.
+  B. Feature anchoring: penalize changes in normalized features relative
+     to a frozen generic encoder on the same permitted training images.
+
+For L2-SP:
+  L = L_PAR + lambda * ||theta_encoder - theta_pretrained||^2
+
+Exclude the newly initialized PAR head from the anchor. Define penalty
+normalization before choosing coefficients. Test separately from LP-FT
+before combining regularizers.
+
+https://proceedings.mlr.press/v80/li18a/li18a.pdf
+
+E12. INTERPOLATION TOWARD PRETRAINED ENCODER WEIGHTS
+--------------------------------------------------
+Priority: medium; low-training-cost follow-up to an existing checkpoint.
+
+  theta_alpha = (1-alpha)*theta_pretrained + alpha*theta_fine_tuned
+
+Try encoder alpha values 0.5, 0.75, 0.9, and 1.0. Keep a compatible PAR
+head, then evaluate whether refitting that head helps.
+
+This is a WiSE-FT-inspired adaptation. The current randomly initialized
+PAR head differs from the original method's compatible zero-shot head;
+blindly averaging the entire state dictionary is inappropriate.
+
+https://github.com/mlfoundations/wise-ft
+
+E13. COMPLEMENTARY-TEACHER KNOWLEDGE DISTILLATION
+-----------------------------------------------
+Priority: medium; primarily transfers behavior into a cheaper model.
+
+Use EVA02-L and SigLIP 2 So400m as teachers for an EVA02-B student with
+an attribute-query head:
+
+  L = L_ground_truth + lambda * BCE(z_student/T, p_teacher_T)
+
+Test temperatures 1 and 2 with modest distillation weights. Retain
+ground-truth supervision. Generate teacher targets only for allowed
+training images.
+
+An improvement over the teacher ensemble is uncertain. For source-domain
+held-out experiments, teacher training must also exclude the held-out
+domain; otherwise the generalization assessment leaks information.
+
+E14. REPAIR DINOv3 TRAINING AND COMPARE POOLING
+--------------------------------------------
+Priority: medium; necessary before drawing conclusions about the family.
+
+Existing schedules:
+  DINOv3-B: 8 total epochs, 8 warm-up epochs.
+  DINOv3-L: 5 total epochs, 5 warm-up epochs.
+
+The cosine-decay branch never executes. Compare against one warm-up epoch
+followed by cosine decay, initially keeping total epochs unchanged.
+
+Then compare class-token pooling, mean patch pooling, and concatenated
+class/mean-patch features. Extend training only if justified by results.
+
+DINOv3-L has already been trained: its saved notebook output records
+validation Challenge_Avg 0.8558 at epoch 5. It is absent from the README
+results and has no recorded hidden-test score.
+
+Notebook:
+notebooks/Self-supervised/upar_track1_dinov3_l16/upar-track1-dinov3-l16.ipynb
+
+E15. LABEL-PRESERVING CORRUPTION AND CONSISTENCY TRAINING
+-------------------------------------------------------
+Priority: medium; targets camera-quality shifts.
+
+Current augmentation covers flips, small translations, and erasing. Test
+moderate JPEG compression, blur, downsample/upsample degradation, noise,
+and mild exposure variation. Add a consistency term between clean and
+corrupted views while retaining supervised loss.
+
+Audit visual examples and per-colour performance. Aggressive hue shifts,
+grayscale conversion, and unrestricted style mixing can destroy colour
+information required by the labels. Place MixStyle below the higher-
+priority experiments for this reason.
+
+E16. WEAK ATTRIBUTE-RELATION OR AUXILIARY-GROUP OBJECTIVES
+--------------------------------------------------------
+Priority: exploratory; source correlations may fail under domain shift.
+
+Test a small relation module over attribute features, or auxiliary group
+classifiers where annotation semantics support them. Keep the final 40
+binary outputs. Verify exclusivity from the actual annotations before
+adding categorical losses. Clothing colours can co-occur, so forcing one
+colour per body region can introduce systematic errors.
+
+Use relation dropout or a residual path to preserve direct visual
+predictions. Retain only if gains survive source-domain held-out tests.
+
+E17. SHARPNESS-AWARE MINIMIZATION (SAM)
+-------------------------------------
+Priority: exploratory after cheaper averaging experiments.
+
+Compare SAM against AdamW at a similar wall-clock budget. Start with
+EVA02-B or trainable heads/final blocks. Standard SAM usually requires
+two gradient evaluations per update, making large-model runs expensive.
+
+EMA/SWAD should receive compute first. Do not assume benefits from
+multiple flatness-related methods add independently.
+
+https://arxiv.org/abs/2010.01412
+
+E18. HELD-OUT CALIBRATION AND ENSEMBLE OPTIMIZATION
+------------------------------------------------
+Priority: first practical experiment with existing checkpoints.
+
+Cache original and horizontally flipped validation logits. Compare:
+  A. Probability averaging versus logit averaging.
+  B. A small global ensemble-weight grid.
+  C. A global logit bias.
+  D. Regularized attribute biases, shrunk toward the global bias.
+  E. A small contribution from DeiT III-L or corrected DINOv3.
+
+A threshold t_j can be represented while keeping the evaluator's fixed
+0.5 threshold:
+
+  p'_j = sigmoid(z_j - logit(t_j))
+
+Optimize Challenge_Avg using separate calibration and assessment data.
+Avoid immediately fitting 40 independent ensemble weights. Temperature
+scaling alone preserves a single model's decisions at 0.5, although it
+can alter a multi-model combination.
+
+4. EVALUATION AND REPRODUCIBILITY BEFORE EXPENSIVE RUNS
+====================================================
+
+1. Match checkpoint evaluation to submitted flip-averaged inference.
+   Training validation currently uses a single forward pass.
+
+2. Evaluate the existing ensemble on the complete real validation split.
+   Its notebook currently checks packaging and numerical equivalence on
+   synthetic images, not recognition performance.
+
+3. Correct ViT-L's remaining per-image-F1 implementation. The README says
+   the notebooks were corrected, but this notebook still uses the older
+   formula. Use F1 from image-averaged precision and recall as specified.
+
+4. Check invalid-label handling and zero-support attributes against the
+   official scorer. Average Challenge_Avg per dataset; do not reconstruct
+   it from globally averaged mA and F1.
+
+5. Save per-domain and per-attribute metrics, FP/FN counts, logits, labels,
+   attribute order, configuration, library versions, and data revision.
+   Save intermediate FP32 checkpoints for averaging and resumption.
+
+6. Add leave-one-source-domain-out evaluation:
+     Train PA100K + PETA; assess Market1501.
+     Train Market1501 + PETA; assess PA100K.
+     Train Market1501 + PA100K; assess PETA.
+   Fit models only on permitted training data. Keep model selection and
+   calibration separate from the domain used to report generalization.
+
+7. Compare candidates on mean and worst-domain Challenge_Avg. Preserve
+   individual mA and instance-F1 results. Repeat finalists with another
+   seed before committing the remaining compute budget.
+
+8. Rising validation BCE suggests worsening probability quality; it does
+   not prove an earlier checkpoint maximizes Challenge_Avg. Higher recall
+   than precision alone does not prove raising thresholds will help.
+
+9. Apply one fixed inference procedure to every hidden image. The README
+   prohibits using hidden-set directory structure for separate models or
+   hyperparameters. No test-time training or hidden-image pseudo-labeling.
+
+10. Keep all experiments within the README's training-data restrictions.
+    Generic pretrained models are permitted; external PAR fine-tuning is
+    not. Bundle all inference dependencies and weights for offline use.
+
+5. RECOMMENDED EXECUTION ORDER
+==============================
+
+Run 0: Evaluate packaged baselines and cache logits.
+       Establish trustworthy reference scores and inference costs.
+
+Run 1: E18 - calibrate the current ensemble using held-out predictions.
+       Find gains available without new backbone training.
+
+Run 2: E01 - EVA02-B attribute-query decoder.
+       Test whether spatial specialization improves recognition.
+
+Run 3: E03 - EVA02-B at 280 x 140.
+       Test pedestrian geometry with 200 patch tokens; include 308 x 168
+       (264 tokens) as a closer-compute control against 224-square (256).
+
+Run 4: E06 - EVA02-B loss comparison.
+       Test whether current positive weighting is appropriate.
+
+Run 5: E07 - EVA02-B source-domain sampling comparison.
+       Test whether PA100K dominance is hurting generalization.
+
+Run 6: E04/E05 - staged fine-tuning and EMA, with separate controls.
+       Test preservation of pretrained generalization.
+
+Run 7: Combine the strongest individual changes.
+       Verify their benefits are compatible before scaling.
+
+Run 8: Transfer the winning recipe to EVA02-L.
+       Test whether the improvement scales to the strongest backbone.
+
+Run 9: E09 or E10 - language queries or local/global cross-fusion.
+       Pursue a larger architecture improvement if compute remains.
+
+Run 10: Final calibration, runtime/memory measurement, offline package
+        checks, attribute-order verification, and submission preparation.
+
+Use short controlled screening runs to reject poor settings, then verify
+finalists at a comparable full budget. Do not run every combination. Keep
+a reference run and change one major factor at a time before combining.
+
+The highest-upside main direction is EVA02-L with global-plus-attribute-
+query features, pedestrian-shaped higher-resolution inputs, staged
+fine-tuning, and weight averaging. Screen components independently on
+EVA02-B, then combine only improvements supported by held-out results.
+
+6. DEADLINES AND FINAL DELIVERABLES
+==================================
+
+According to the repository README:
+  Challenge phase ends: October 22, 2026, 6:00 PM GMT+6.
+  Paper deadline: October 23, 2026, AoE.
+  Code and fact-sheet deadline: October 26, 2026, AoE.
+
+Confirm the current phase information on the platform before scheduling
+the final submission. The README states that the latest valid submission
+counts, rather than the best historical submission.
+
+Preserve the strongest verified ZIP and reproducible training artifacts.
+Measure full-run inference cost before adding heavy fusion or ensembles.
+The final code must return all 40 probabilities, match the requested
+attribute order, operate without network access, and fit the runtime
+environment described in the README.
