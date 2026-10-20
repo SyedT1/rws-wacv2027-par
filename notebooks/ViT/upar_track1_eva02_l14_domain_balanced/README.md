@@ -6,7 +6,7 @@ This trains a single EVA02-L/14 backbone with a global 40-attribute classifier a
 
 ## Reported scores
 
-The notebook run achieved the following reported evaluation scores (values on a 0–1 scale):
+The user-reported evaluation scores are below (values on a 0–1 scale). These are separate from the validation metrics saved in the executed notebook.
 
 | Avg | mA | Label_F1 | Inst_Acc | Inst_Prec | Inst_Rec | Inst_F1 |
 |---|---|---|---|---|---|---|
@@ -14,19 +14,33 @@ The notebook run achieved the following reported evaluation scores (values on a 
 
 For historical context, the EVA02-L/14 baseline recorded hidden-test Avg 0.7825 and the EVA02-L + SigLIP 2 ensemble recorded 0.7856. These are separate runs, not matched sampling controls.
 
-## Google Drive quota / reusable data
+## Recorded notebook execution
 
-`FileURLRetrievalError: Too many users have viewed or downloaded this file recently` is a quota block on the public Google Drive file, before training. The frozen-module debugger warnings are unrelated.
+The saved outputs show a completed five-epoch run with the mixture configuration below, 303.3M model parameters, 97,669 training images, and 33,407 validation images. The run uses `timm==1.0.22` and artifact prefix `upar_track1_eva02_l14_domain_sampling_mixture_mix0.5_fixed_image_v1`.
 
-To continue while the host is blocked:
+| Epoch | Train BCE | Validation BCE | Validation mA | Validation Inst_F1 | Validation Challenge_Avg |
+|---|---|---|---|---|---|
+| 1 | 0.4413 | 0.3320 | 0.8590 | 0.8694 | 0.8637 |
+| 2 | 0.1764 | 0.4069 | 0.8724 | 0.8937 | 0.8823 |
+| **3 (selected)** | **0.1264** | **0.4657** | **0.8719** | **0.8981** | **0.8842** |
+| 4 | 0.1000 | 0.5053 | 0.8666 | 0.9032 | 0.8841 |
+| 5 | 0.0886 | 0.5138 | 0.8652 | 0.9042 | 0.8838 |
 
-1. In Kaggle, use **Add Input** to attach a previous successful notebook's saved data or a dataset containing the original source images/ZIPs. A submission ZIP containing only weights is insufficient.
-2. Keep the prepared `Market1501/`, `PA100k/`, and `PETA/` directory layout, or the original archive layout. Market1501's original `Market-1501-v15.09.15/` layout is supported. Original PETA files are converted using the organizer's filename mapping.
-3. Run the updated notebook from the first cell. It scans `/kaggle/input` automatically, copies only missing annotation-referenced images, and skips downloading complete sources. Add any other cache directories to `LOCAL_DATA_ROOTS` in the setup cell. `UPAR_DATA_ROOT`, if set, is also searched as an image/archive cache; training uses the prepared writable `DATA` directory.
+Validation metrics are equal-source means. At the selected epoch, per-source results and training sampling shares were:
 
-Local ZIPs can have different filenames; members are matched by known source paths rather than basename alone. Annotation labels always come from the organizer repository. Cached ZIPs are retained, and image coverage is checked before training. If no complete local copy is available, the public host must become available again; the notebook cannot remove its quota restriction.
+| Source | Training images | Expected sampling share | Validation mA | Validation Inst_F1 | Validation Challenge_Avg |
+|---|---|---|---|---|---|
+| Market1501 | 10,000 | 21.7860% | 0.8049 | 0.8921 | 0.8462 |
+| PA100K | 79,001 | 57.1099% | 0.8825 | 0.8757 | 0.8791 |
+| PETA | 8,668 | 21.1041% | 0.9284 | 0.9265 | 0.9274 |
 
-The local-reuse helper is embedded in the notebook, so uploading the `.ipynb` alone is sufficient. `data_sources.py` is the readable copy of that helper. Small temporary-file checks run before download attempts and exercise extracted data, ZIP layouts, PETA mapping, repeat execution, and unused unsafe archive members.
+The saved outputs confirm that sampling self-checks, the pre-training offline/timm equivalence check, and packaged inference checks passed. Both recorded offline/timm comparisons had maximum logit difference `0.0`. Packaging produced `upar_track1_eva02_l14_domain_sampling_mixture_mix0.5_fixed_image_v1_submission.zip` (561 MB as printed by the notebook), containing `run.py`, `metadata.yaml`, and the selected checkpoint under `assets/`.
+
+## Data downloads
+
+The executed notebook downloads Market1501 and PA100K from Google Drive and PETA from Dropbox, copies organizer annotations, checks image coverage, and removes the source ZIPs after successful preparation. Its download cells use `/kaggle/working/upar_2027/data` and skip downloads for sources whose required images are already present.
+
+`FileURLRetrievalError: Too many users have viewed or downloaded this file recently` indicates a public Google Drive quota block. If this occurs on a repeat run, retry when the host becomes available or manually prepare the required images in the notebook's data directory. This notebook does not automatically scan `/kaggle/input` or embed the separate `data_sources.py` cache helper.
 
 ## Comparison runs
 
@@ -49,7 +63,7 @@ Counts come from the training CSV. Balancing holds in expectation, not in every 
 
 ## Model and training configuration
 
-The notebook's default configuration is:
+The executed notebook uses the following configuration:
 
 | Setting | Value |
 |---|---|
@@ -93,4 +107,4 @@ Outputs under `/kaggle/working` have a prefix containing sampling mode, mixture 
 
 Change `RUN_SUFFIX` before repeating an existing configuration; the notebook stops if its output prefix already exists. The ZIP excludes validation logits, labels, and images. Inference uses neither domain identities nor timm and requires no network access.
 
-The scores above were supplied from the completed notebook run. Training and the PyTorch runtime checks execute in Kaggle; this README update does not rerun training.
+The reported evaluation scores were supplied by the user; the validation history and successful runtime checks above were read from the notebook's saved execution outputs. Training was not rerun for this documentation update.
