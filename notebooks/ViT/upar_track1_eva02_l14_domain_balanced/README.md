@@ -2,7 +2,17 @@
 
 Open [upar-track1-eva02-l14-domain-balanced.ipynb](upar-track1-eva02-l14-domain-balanced.ipynb) in Kaggle, enable **GPU and Internet**, and run all cells.
 
-This uses the strongest recorded single backbone, EVA02-L/14 (hidden-test Avg 0.7825), with its global classifier. The existing EVA02-L + SigLIP 2 ensemble scores 0.7856; this notebook trains one model that could later be evaluated as an ensemble member. No new score is claimed.
+This trains a single EVA02-L/14 backbone with a global 40-attribute classifier and domain-balanced sampling.
+
+## Reported scores
+
+The notebook run achieved the following reported evaluation scores (values on a 0–1 scale):
+
+| Avg | mA | Label_F1 | Inst_Acc | Inst_Prec | Inst_Rec | Inst_F1 |
+|---|---|---|---|---|---|---|
+| **0.7839** | 0.7875 | 0.6014 | 0.6651 | 0.7469 | 0.8311 | 0.7803 |
+
+For historical context, the EVA02-L/14 baseline recorded hidden-test Avg 0.7825 and the EVA02-L + SigLIP 2 ensemble recorded 0.7856. These are separate runs, not matched sampling controls.
 
 ## Google Drive quota / reusable data
 
@@ -37,13 +47,33 @@ p(i) = (1 - DOMAIN_MIX) / N + DOMAIN_MIX / (K * n_d)
 
 Counts come from the training CSV. Balancing holds in expectation, not in every minibatch. With replacement, some images repeat and others are omitted during an epoch. Every mode uses `floor(N / BATCH_SIZE)` optimizer steps per epoch, so oversampling does not extend the update budget. At the recorded 97,669 training images and batch 16, that is 6,104 steps and 97,664 draws per epoch.
 
-## Fixed settings
+## Model and training configuration
 
-- EVA02-L/14 global head, generic ImageNet-pretrained initialization.
-- Direct resize to 224 x 224; original normalization and augmentation.
-- Five epochs, batch 16, peak LR 5e-5, layer decay 0.85, weight decay 0.05, drop-path 0.2, one warm-up epoch, seed 42.
-- Flip-logit averaging for validation and submission in every arm.
-- `LOSS_WEIGHT_MODE = "fixed_image"`: positive weights use the original training-image distribution and remain identical across sampling arms.
+The notebook's default configuration is:
+
+| Setting | Value |
+|---|---|
+| Backbone | `eva02_large_patch14_448.mim_in22k_ft_in22k_in1k` (timm EVA02-L/14) |
+| Initialization | ImageNet-22k MIM pretraining, then ImageNet-22k and ImageNet-1k fine-tuning |
+| Classifier | Global linear head with 40 outputs; head weights and bias initialized to zero |
+| Input | RGB, direct resize to 224 x 224; 14 x 14 patches |
+| Normalization mean | `(0.48145466, 0.4578275, 0.40821073)` |
+| Normalization standard deviation | `(0.26862954, 0.26130258, 0.27577711)` |
+| Training sources | Market1501, PA100K, PETA; organizer training split |
+| Sampling | `SAMPLING_MODE = "mixture"`, `DOMAIN_MIX = 0.5`, with replacement |
+| Loss | `BCEWithLogitsLoss`; `LOSS_WEIGHT_MODE = "fixed_image"`, positive weights `(negative / positive)` clipped to `[1, 20]` |
+| Epochs / batch size | 5 / 16 |
+| Optimizer | AdamW; peak head learning rate `5e-5`, layer-wise LR decay `0.85`, weight decay `0.05` (no decay on norms/biases) |
+| LR schedule | One epoch of linear warm-up, then cosine decay |
+| Regularization | Drop-path `0.2`; gradient norm clipping at `1.0` |
+| Training augmentation | Random horizontal flip, edge padding of 10 pixels, random crop to 224 x 224, random erasing with probability `0.25` |
+| Precision | CUDA FP16 automatic mixed precision with gradient scaling |
+| Checkpoint selection | Best equal-source mean validation `Challenge_Avg` |
+| Validation / inference | Average original and horizontally flipped logits, then sigmoid; validation threshold `> 0.5` |
+| Inference batch size | 16 |
+| Seed | 42 |
+
+Fixed-image positive weights use the original training-image distribution and remain identical across sampling arms.
 
 The optional `LOSS_WEIGHT_MODE = "sampling"` uses the expected sampled positive prevalence instead. Treat it as a separate sampling-plus-loss experiment. Keep the default fixed weights for the primary comparison.
 
@@ -63,4 +93,4 @@ Outputs under `/kaggle/working` have a prefix containing sampling mode, mixture 
 
 Change `RUN_SUFFIX` before repeating an existing configuration; the notebook stops if its output prefix already exists. The ZIP excludes validation logits, labels, and images. Inference uses neither domain identities nor timm and requires no network access.
 
-The notebook has been inspected locally; training and the PyTorch runtime checks must be executed in Kaggle. No local GPU-training result is available.
+The scores above were supplied from the completed notebook run. Training and the PyTorch runtime checks execute in Kaggle; this README update does not rerun training.
